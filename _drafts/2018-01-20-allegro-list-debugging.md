@@ -6,7 +6,7 @@ tags: [debugging, programming, trace]
 ---
 The topic of today's post is the trace method. While trace is part of the common lisp spec, it dosent go into much detail about the behavior of trace. As a result this post will be specific to the Allegro Common Lisp implementation of trace. 
 
-For those of you who dont already know, trace provides a simple and easy way to get visibility into the inputs and outputs of your functions (and indirectly, how often they are called). As we go through the different examples I will using repl inputs and outputs expecting that the following code has been evaluated already.
+For those of you who don't already know, trace provides a simple and easy way to get visibility into the inputs and outputs of your functions (and indirectly, how often they are called). As we go through the different examples I will using repl inputs and outputs expecting that the following code has been evaluated already.
 * TOC
 {:toc}
 # Reference Code
@@ -33,9 +33,6 @@ Through the rest of this document there will be examples of REPL input and outpu
   "register a group of people"
   (mapc 'register-guest list-of-names))
 {% endhighlight %}
-
-## Trace
-One of the more disheartening things I've run into in lisp is that the language specifications mentioned a trace utility but didn't really dive into what it should do. As a result ever lisp dialect seems to have slightly different specifications. Here we are going to focus on the allegro CL Trace utility.
 
 # What Is Trace?
 Well if you made adjusted a function to print what arguments it was called with everytime it got called and then to print out again then you would have implemented a rudimentary trace on said function. The lisp trace utility gives us the ability to get information of when our function is called and what its called with WITHOUT having to manually adjust any code. All the visibility with none of the risk.
@@ -78,14 +75,14 @@ cl-user(85): (register-group "person-one" "person-two" "person-three")
 Notice how when nested functions are traced the trace printouts come out nested accordly!
 
 Trace called with no arguments will just return a list of all the functions currently being traced while untrace with no arguments will stop all functions from being traced. 
-
+{% highlight lisp %}
 cl-user(86): (trace)
 (register-guest register-group multiply)
 cl-user(87): (untrace)
 nil
 cl-user(88): (trace)
 nil
-
+{% endhighlight %}
 
 # Advanced Tracing
 ## intro
@@ -111,73 +108,64 @@ cl-user(91): (register-guest "person2")
  0[5]: returned 7
 7
 {% endhighlight %}
-
 ### Thoughts
 Part of how I would infer this to be used would be too tie the trace forms to some global value a \*trace-key-functions-p\* or something along those lines which could potentially give people the ability to easily turn on tracing for certain functions. I can kind of see this as a sort of scaffolding you could use while building up a project but definitiely not as a long term solution. I prefer to build up records to a logfile which can be used to audit the program, preferably by someone other than a trained developer. Beyond that I have a strong personal preference twoards a functional style that takes alot of advantage of lexical scoping so while this is helpful its not the solution i was hoping for. 
 ## The Break Family (:break-before, :break-after & :break-all) 
 ### Description
-These three take a value which is evaluated every time the function in question is called. If the value evaluates to true then the program will break before the function is called, after the function is called or both (respectivly)
+These three take a form which is evaluated every time the function in question is called. If the value evaluates to true then the program will break before the function is called, after the function is called or both (respectively)
 ### Example
-cl-user(48): (defun multiply (input)
-               (* input (random 100)))
-multiply
-cl-user(49): (multiply 100)
-800
-cl-user(50): (let ((*do-trace* t))
-               (multiply 9))
- 0[5]: (multiply 9)
- 0[5]: returned 81
-81
-cl-user(51): 
-
-
-
-
-cl-user(59): (trace (multiply :condition *do-trace* :break-after *do-break*))
-(multiply)
-cl-user(60): (multiply 10)
-70
-cl-user(61): (let ((*do-break* t))
-               (multiply 20))
-1600
-cl-user(62): (let ((*do-break* t))
-               (multiply 20))
-400
-cl-user(63): (let ((*do-break* t) (*do-trace* t))
-               (multiply 20))
- 0[5]: (multiply 20)
-Break: exiting multiply
-cl-user(64): 
-
+{% highlight lisp %}
+cl-user(92): (untrace)
+nil
+cl-user(93): (trace (register-guest :break-before (evenp *total-guest-count*)))
+(register-guest)
+cl-user(94): (register-guest "person1")
+ 0[5]: (register-guest "person1")
+ 0[5]: returned 8
+8
+cl-user(95): 
+cl-user(95): (register-guest "person2")
+ 0[5]: (register-guest "person2")
+Break: traced call to register-guest
+{% endhighlight %}
+Its good to note the interplay between the two options we have so far. The form for the break keyword is only checked after the form for the condition keyword (in this case it is assumed to be t since we didnt declare otherwise)
 ### Thoughts
 Once you have a break you are tossed into the debugger with the full power of the repl to inspect values and, if you absolutely have too, change the environment in ways to test/induce/mock solutions for your issue. Once you are done playing around you can drop back into the program logic and have it continue as if nothing had ever happened. Again, the value you give it to check when it should break is not evaulated in any sort of scope that gives you access to function inputs so really its build for checking global variables (something im not terribly fond of)
-## :print-before, :print-after, :print-all
+## The Print Family (:print-before, :print-after & :print-all)
 ### Description 
-Printing out data each time that its printed out - before, after, or before and after - the function is called
+Very similar to the break options, the Print family takes a list of forms which will be evaluated and printed out before, after, or before and after the function is called. 
 ### Example
-
-
-
-
-
-(defparameter *counter* 0
-"counter for the total number of visitors")
-
-(defparameter *visitor-list* nil
-   "a list containing all the names of visitors who gave their name")
-
-(defun log-visitor (&optional visitor-name)
-   (when visitor-name (push visitor-name *visitor-list*))
-   (incf *counter*))
-
-(defun welcome-group (list-of-visitor-names)
-"adds a group of people"
-(mapc 'log-visitor list-of-visitor-names))
-
-(trace (log-visitor :print-before *counter* :print-after *visitor-list*))
-(trace (log-visitor :inside))
-
+{% highlight lisp %}
+cl-user(96): (untrace)
+nil
+cl-user(97): (trace (register-guest :print-all (*guest-book* *total-guest-count*)))
+(register-guest)
+cl-user(98): (register-guest "guest 2")
+ 0[5]: (register-guest "guest 2")
+ 0* ("person1" "person2" "person1" "person-three" "person-two" "person-one" "joshua" "Alonzo Church")
+ 0* 8
+ 0[5]: returned 9
+ 0* ("guest 2" "person1" "person2" "person1" "person-three" "person-two" "person-one" "joshua" "Alonzo Church")
+ 0* 9
+9
+cl-user(99): 
+{% endhighlight %}
+Note that the list of things to print can be forms, in the example above the existing guestlist is a little long for us to look at so lets focus in on the most recent three names on the guestlist. 
+{% highlight lisp %}
+cl-user(105): (trace (register-guest :print-all ((subseq *guest-book* 0 3) (mod *total-guest-count* 10))))
+(register-guest)
+cl-user(106): (register-guest "person three")
+ 0[5]: (register-guest "person three")
+ 0* ("person three" "person three" "guest 2")
+ 0* 1
+ 0[5]: returned 12
+ 0* ("person three" "person three" "person three")
+ 0* 2
+12
+{% endhighlight %}
 ### Thoughts 
+If you have a function which is affecting the global state in some way trace's print options can be a very easy way to gain visibility into those interactions. 
+
 ## :inside, :not-inside
 ### Description 
 These are my absolute favorite two options for trace, they opened the door for me to use trace in a more targeted and efficient manner. 
